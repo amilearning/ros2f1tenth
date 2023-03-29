@@ -153,6 +153,7 @@ public:
     void log_odom(const nav_msgs::msg::Odometry& odom);
     void display_path();
     void updatelookaheadPath(const double& x, const double& y, const double& length);
+    std::vector<std::tuple<double, double, double>> getlookaheadPath(); 
     // // extract a lookahead path in frenet coordinate given the current position (odometry)
     // void extractLookaheadPath(const nav_msgs::msg::Odometry& odom, nav_msgs::msg::Path& lookahead_path);
 

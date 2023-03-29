@@ -18,7 +18,9 @@ TrajectoryManager::TrajectoryManager(const std::shared_ptr<rclcpp::Node>& node_)
 
 }
 
-
+std::vector<std::tuple<double, double, double>> TrajectoryManager::getlookaheadPath(){
+    return lookahead_path;
+}
 
 void TrajectoryManager::updatelookaheadPath(const double& x, const double& y, const double& length) {
     ref_path = path_logger.getPath();
@@ -57,7 +59,7 @@ void TrajectoryManager::updatelookaheadPath(const double& x, const double& y, co
     std::vector<std::tuple<double, double, double>> segment(first, last);
 
     lookahead_path = segment;
-    // std::cout << ys << std::endl;
+    
     
 
 }
@@ -66,7 +68,9 @@ void TrajectoryManager::updatelookaheadPath(const double& x, const double& y, co
 
 
 void TrajectoryManager::display_path(){
+    
     if (path_logger.path_.size() > 0){
+    
         std_msgs::msg::ColorRGBA ref_color, lookahead_color;
         ref_color.r = 1.0;
         ref_color.a = 0.2;

@@ -1,13 +1,24 @@
 #include "ctrl.h"
 
-#include <cmath>
+
 
 // constructor
 
 // Controller::Controller(const std::shared_ptr<rclcpp::Node>& node) : traj_manager_(node) {
-    Controller::Controller(const std::shared_ptr<rclcpp::Node>& node_) : node(node_), traj_manager_(node_){
+    Controller::Controller(const std::shared_ptr<rclcpp::Node>& node_) : node(node_), traj_manager_(node_), init_run(true){
     // create publishers and subscribers here as before
     // create publishers
+    mem = FORCESNLPsolver_internal_mem(0);
+    N = 10;
+    nvar = 7;
+    neq = 5;    
+    npar = 2;
+    exitflag = 0;
+    return_val = 0;
+    x0i.resize(nvar,1);
+    x0.resize(nvar, N);
+
+
     
     //Initialize parameters
     node->declare_parameter("param_filename", "config.yaml");
@@ -41,7 +52,7 @@
     timer_cb_group_ = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     double main_controller_freq = 10.0;  // 10 Hz
     main_controller_timer_ = node->create_wall_timer(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / main_controller_freq)),
+        std::chrono::milliseconds(100),
         std::bind(&Controller::mainControllerSolveCallback, this),timer_cb_group_);
 
     
@@ -56,7 +67,45 @@ void Controller::mainControllerSolve(){
 void Controller::mainControllerSolveCallback() {
     // Get current vehicle state
     traj_manager_.display_path();
-    traj_manager_.updatelookaheadPath(cur_state.position(0),cur_state.position(1),2.0);
+    traj_manager_.updatelookaheadPath(cur_state.position(0),cur_state.position(1),3.0);
+    
+    // set initial state [F, deltarate, xPos yPos vx yaw delta] input = [acceleration force F and steering rate phi]
+    x0i << 0.0, 0.0, cur_state.position(0),cur_state.position(1),cur_state.vx, cur_state.yaw, cur_state.delta;
+    // set initial guess
+        if(init_run){
+            for (int i = 0; i < N; ++i) {
+            x0.col(i) = x0i;
+            }
+            init_run = false;
+        }
+    
+    // set ref path 
+    std::vector<std::tuple<double, double, double>> lookahead_path = traj_manager_.getlookaheadPath();
+      
+    if(lookahead_path.size() >= N){
+        
+        Eigen::MatrixXd target_path(2,N);
+        
+        for(int i = 0; i < N; i++) {
+            target_path(0, i) = std::get<0>(lookahead_path[i]);
+            target_path(1, i) = std::get<1>(lookahead_path[i]);
+        }
+
+
+        std::memcpy(mpc_problem.xinit, x0i.data(), x0i.rows()* x0i.cols()* sizeof(double));
+        std::memcpy(mpc_problem.x0, x0.data(), x0.rows()* x0.cols()* sizeof(double));
+        std::memcpy(mpc_problem.all_parameters, target_path.data(), target_path.rows()* target_path.cols()* sizeof(double));
+
+        exitflag = FORCESNLPsolver_solve(&mpc_problem, &output, &info, mem, NULL, extfunc_eval);
+        if (exitflag !=1)
+        {
+            std::cout<< "/n/nmyMPC did not return optimla solution)" <<std::endl;
+        } 
+            // std::cout <<"output force " << output.x01[0];
+            // std::cout <<"output deltarate " << output.x01[1];
+            
+    }
+    
         
     return;
 }

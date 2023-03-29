@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <Eigen/Dense>
-
+#include <chrono>
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/timer.hpp"
 
@@ -104,8 +104,21 @@ private:
     double max_speed_;
     double max_steering_angle_;
     double look_ahead_distance_;
-    
 
+    FORCESNLPsolver_params mpc_problem;
+    FORCESNLPsolver_info info;
+    FORCESNLPsolver_output output;
+    FORCESNLPsolver_mem * mem;
+    FORCESNLPsolver_extfunc extfunc_eval = &FORCESNLPsolver_adtool2forces;
+    Eigen::MatrixXd x0;
+    Eigen::MatrixXd x0i;
+    bool init_run;
+    int N;
+    int nvar;
+    int neq;    
+    int npar;
+    int exitflag;
+    int return_val;
 
 };
 

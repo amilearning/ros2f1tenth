@@ -41,8 +41,10 @@ include_directories(
 )
 
 
+
 add_executable(ctrl_node src/main.cpp src/ctrl.cpp src/trajectory.cpp src/FORCESNLPsolver_interface.c src/FORCESNLPsolver_model.c)
 target_link_libraries(ctrl_node ${Boost_LIBRARIES} ${catkin_LIBRARIES} -ldl -lm ${CMAKE_CURRENT_SOURCE_DIR}/include/FORCESNLPsolver/lib/libFORCESNLPsolver.so)
+
 ament_target_dependencies(ctrl_node 
 tf2
 tf2_geometry_msgs
@@ -63,6 +65,11 @@ install(TARGETS
 install(DIRECTORY include/
   DESTINATION include/
 )
+
+set(NODE_NAME "ctrl_node")
+# install(DIRECTORY include/FORCESNLPsolver/lib/
+#   DESTINATION lib/${PROJECT_NAME}/${NODE_NAME}
+# )
 
 ament_export_dependencies(
   Eigen3
