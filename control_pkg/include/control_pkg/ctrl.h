@@ -65,7 +65,7 @@ public:
     // compute the backup controller to use if the main controller fails
     void backupController(const VehicleState& state, ControlInput& control_input);
 
-  
+    TrajectoryManager traj_manager_;
 
 private:
     
@@ -105,7 +105,7 @@ private:
     double max_steering_angle_;
     double look_ahead_distance_;
     
-    TrajectoryManager traj_manager_;
+
 
 };
 

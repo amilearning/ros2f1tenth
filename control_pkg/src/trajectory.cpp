@@ -1,39 +1,94 @@
 // include necessary headers
-#include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/string.hpp"
-#include "geometry_msgs/msg/twist.hpp"
-#include "sensor_msgs/msg/laser_scan.hpp"
-#include "sensor_msgs/msg/imu.hpp"
-#include "nav_msgs/msg/odometry.hpp"
-#include <thread>
-#include <mutex>
 
-#include <cmath>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <vector>
-
-#include "nav_msgs/msg/odometry.hpp"
-#include "nav_msgs/msg/path.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include "trajectory.h"
 
-#include <cmath>
-TrajectoryManager::TrajectoryManager(const std::shared_ptr<rclcpp::Node>& node_) : node(node_){
+TrajectoryManager::TrajectoryManager(const std::shared_ptr<rclcpp::Node>& node_) : node(node_), path_logger(0.1){
     // create publishers and subscribers
     is_recording_ = false;
     start_recording_srv_ = node->create_service<std_srvs::srv::Empty>("path_record_init", std::bind(&TrajectoryManager::startRecordingCallback, this, std::placeholders::_1, std::placeholders::_2));
     stop_recording_srv_ = node->create_service<std_srvs::srv::Empty>("path_record_stop", std::bind(&TrajectoryManager::stopRecordingCallback, this, std::placeholders::_1, std::placeholders::_2));
     save_path_srv_ = node->create_service<std_srvs::srv::Empty>("path_save", std::bind(&TrajectoryManager::savePathCallback, this, std::placeholders::_1, std::placeholders::_2));
+    read_path_srv_ = node->create_service<std_srvs::srv::Empty>("path_read", std::bind(&TrajectoryManager::readPathCallback, this, std::placeholders::_1, std::placeholders::_2));
+
+    path_pub = node->create_publisher<visualization_msgs::msg::Marker>("ego_path", 10);
+    lookahead_path_pub = node->create_publisher<visualization_msgs::msg::Marker>("lookahead_path", 10);
+    
+    
+
+}
 
 
+
+void TrajectoryManager::updatelookaheadPath(const double& x, const double& y, const double& length) {
+    ref_path = path_logger.getPath();
+    // Find the closest point on the path to the current position
+    double closest_dist = std::numeric_limits<double>::infinity();
+    int closest_idx = -1;
+    for (int i = 0; i < ref_path.size(); ++i) {
+        double dist = std::sqrt(std::pow(std::get<0>(ref_path[i]) - x, 2.0) + std::pow(std::get<1>(ref_path[i]) - y, 2.0));
+        if (dist < closest_dist) {
+            closest_dist = dist;
+            closest_idx = i;
+        }
+    }
+
+    // Determine the start and end indices of the segment
+    double total_dist = 0.0;
+    int start_idx = closest_idx;
+    int end_idx = closest_idx;
+    while (total_dist < length) {
+        
+        if (end_idx < ref_path.size() - 1) {
+            double dist = std::sqrt(std::pow(std::get<0>(ref_path[end_idx]) - std::get<0>(ref_path[end_idx + 1]), 2.0) + std::pow(std::get<1>(ref_path[end_idx]) - std::get<1>(ref_path[end_idx + 1]), 2.0));
+            if (total_dist + dist < length) {
+                total_dist += dist;
+                ++end_idx;
+            } else {
+                break;
+            }
+        }else{
+            break;
+        }
+    }
+    std::vector<std::tuple<double, double, double>>::const_iterator first = ref_path.begin() + start_idx;
+    std::vector<std::tuple<double, double, double>>::const_iterator last = ref_path.begin() + end_idx;
+
+    std::vector<std::tuple<double, double, double>> segment(first, last);
+
+    lookahead_path = segment;
+    // std::cout << ys << std::endl;
+    
+
+}
+
+
+
+
+void TrajectoryManager::display_path(){
+    if (path_logger.path_.size() > 0){
+        std_msgs::msg::ColorRGBA ref_color, lookahead_color;
+        ref_color.r = 1.0;
+        ref_color.a = 0.2;
+        lookahead_color.g = 1.0;
+        lookahead_color.a = 1.0;
+        visualization_msgs::msg::Marker path_marker = path_logger.getPathMarker(ref_path,ref_color);
+        visualization_msgs::msg::Marker lookahedpath_marker = path_logger.getPathMarker(lookahead_path,lookahead_color);
+        path_pub->publish(path_marker);
+        lookahead_path_pub->publish(lookahedpath_marker);
+    }
+}
+void TrajectoryManager::log_odom(const nav_msgs::msg::Odometry& odom){
+    
+    if(is_recording_){
+        path_logger.logPath(odom);
+    }
 }
 
 
 void TrajectoryManager::startRecordingCallback(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res) {
     is_recording_ = true;
+
     RCLCPP_INFO(node->get_logger(), "Path Recording Init");
 }
 
@@ -42,11 +97,24 @@ void TrajectoryManager::stopRecordingCallback(const std::shared_ptr<std_srvs::sr
     RCLCPP_INFO(node->get_logger(), "Path Recording Stop");
 }
 
+void TrajectoryManager::readPathCallback(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res){
 
+    std::string package_path = ament_index_cpp::get_package_share_directory("control_pkg");
+    std::string path_file = package_path + "/path/path.txt";
+    path_logger.readPathFromFile(path_file);
+    // RCLCPP_INFO(node->get_logger(), "Path Saved at");
+    RCLCPP_INFO(node->get_logger(), "Path read from file: %s", path_file.c_str());
+}
 
 // save the path as center line in global coordinate
 void TrajectoryManager::savePathCallback(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res) {
-    RCLCPP_INFO(node->get_logger(), "Path Saved at");
+    
+   
+    std::string package_path = ament_index_cpp::get_package_share_directory("control_pkg");
+    std::string path_file = package_path + "/path/path.txt";
+    path_logger.savePathToFile(path_file);
+    // RCLCPP_INFO(node->get_logger(), "Path Saved at");
+    RCLCPP_INFO(node->get_logger(), "Path saved to file: %s", path_file.c_str());
     // if (recorded_path_.poses.size() > 0) {
     //     std::string filename = req->data;
     //     rosbag::Bag bag;
@@ -62,32 +130,6 @@ void TrajectoryManager::savePathCallback(const std::shared_ptr<std_srvs::srv::Em
 }
 
 
-// // extract a lookahead path in frenet coordinate given the current position (odometry)
-// oid extractLookaheadPath(const nav_msgs::msg::Odometry& odom, nav_msgs::msg::Path& lookahead_path) {
-//     // find the closest point on the path to the current position
-//     double closest_distance = std::numeric_limits<double>::max();
-//     double closest_s = 0.0;
-//     double closest_d = 0.0;
-//     for (const auto& pose : path_.poses) {
-//         double dx = pose.pose.position.x - odom.pose.pose.position.x;
-//         double dy = pose.pose.position.y - odom.pose.pose.position.y;
-//         double distance = std::sqrt(dx*dx + dy*dy);
-//         if (distance < closest_distance) {
-//             closest_distance = distance;
-//             closest_s = ...; // TODO: compute the s-coordinate of the closest point in frenet space
-//             closest_d = ...; // TODO: compute the d-coordinate of the closest point in frenet space
-//         }
-//     }
-
-//     // compute the lookahead point in frenet space
-//     double lookahead_distance = 10.0; // 10 meters lookahead
-//     double lookahead_s = closest_s + lookahead_distance;
-//     double lookahead_d = ...; // TODO: compute the d-coordinate of the lookahead point in frenet space
-
-//     // convert the lookahead point back to global coordinates
-//     nav_msgs::msg::Path lookahead_path_frenet = convertFrenetToPath({lookahead_s}, {lookahead_d});
-//     lookahead_path = lookahead_path_frenet;
-// }
 
 
 // save and load a path file

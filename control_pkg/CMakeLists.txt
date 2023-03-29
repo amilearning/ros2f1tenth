@@ -28,8 +28,7 @@ find_package(vesc_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-
-
+find_package(Boost REQUIRED COMPONENTS filesystem)
 
 include_directories(
   # include
@@ -38,11 +37,12 @@ include_directories(
   include/FORCESNLPsolver/include    
   include/FORCESNLPsolver    
   ${EIGEN3_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
 
 add_executable(ctrl_node src/main.cpp src/ctrl.cpp src/trajectory.cpp src/FORCESNLPsolver_interface.c src/FORCESNLPsolver_model.c)
-target_link_libraries(ctrl_node ${catkin_LIBRARIES} -ldl -lm ${CMAKE_CURRENT_SOURCE_DIR}/include/FORCESNLPsolver/lib/libFORCESNLPsolver.so)
+target_link_libraries(ctrl_node ${Boost_LIBRARIES} ${catkin_LIBRARIES} -ldl -lm ${CMAKE_CURRENT_SOURCE_DIR}/include/FORCESNLPsolver/lib/libFORCESNLPsolver.so)
 ament_target_dependencies(ctrl_node 
 tf2
 tf2_geometry_msgs

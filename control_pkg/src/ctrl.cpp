@@ -55,6 +55,9 @@ void Controller::mainControllerSolve(){
 
 void Controller::mainControllerSolveCallback() {
     // Get current vehicle state
+    traj_manager_.display_path();
+    traj_manager_.updatelookaheadPath(cur_state.position(0),cur_state.position(1),2.0);
+        
     return;
 }
 // // convert the odometry to vehicle state
@@ -146,7 +149,7 @@ void Controller::odometryToVehicleState(const nav_msgs::msg::Odometry& odom, Veh
 void Controller::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
 //     // convert the odometry to vehicle state
     odometryToVehicleState(*msg, cur_state);
-    
+    traj_manager_.log_odom(*msg);
     // RCLCPP_INFO(node->get_logger(), "current yaw in deg: %f", cur_state.yaw*180.0/M_PI);
 
 }
